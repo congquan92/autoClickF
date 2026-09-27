@@ -7,11 +7,12 @@
 ## 📋 Mục lục
 
 - [Tổng quan & Tác dụng](#-tổng-quan--tác-dụng)
+- [Giao diện Trực quan (GUI)](#-giao-diện-trực-quan-gui)
 - [Các tính năng nổi bật](#-các-tính-năng-nổi-bật)
 - [Yêu cầu hệ thống](#-yêu-cầu-hệ-thống)
 - [Cài đặt](#-cài-đặt)
-    - [Cách 1: Cài đặt tự động (Khuyến nghị)](#cách-1-cài-đặt-tự-động-khuyến-nghị)
-    - [Cách 2: Cài đặt thủ công](#cách-2-cài-đặt-thủ-công)
+    - [Cách 1: Khởi chạy 1 chạm (Khuyến nghị)](#cách-1-khởi-chạy-1-chạm-khuyến-nghị)
+    - [Cách 2: Chạy thủ công](#cách-2-chạy-thủ-công)
 - [Hướng dẫn sử dụng](#-hướng-dẫn-sử-dụng)
 - [Các phím tắt điều khiển](#-các-phím-tắt-điều-khiển)
 - [Cấu hình hệ thống (.env)](#-cấu-hình-hệ-thống-env)
@@ -22,27 +23,57 @@
 
 ## 🎮 Tổng quan & Tác dụng
 
-**Genshin Impact Dialogue Auto-Skip** là một công cụ tự động tua và bỏ qua các đoạn hội thoại dài dòng trong Genshin Impact. Công cụ này hoạt động thông qua việc:
+**Genshin Impact Dialogue Auto-Skip** là một công cụ tự động tua và bỏ qua các đoạn hội thoại dài dòng trong Genshin Impact. Công cụ hoạt động thông qua việc:
 
 - Tự động nhận diện thời điểm hội thoại đang diễn ra trên màn hình bằng cách phân tích màu sắc điểm ảnh (pixel detection).
 - Tự động bấm liên tục phím tương tác (mặc định là phím **F**) để tua nhanh lời thoại qua từng câu.
-- Khi xuất hiện các bảng câu hỏi hoặc tùy chọn lựa chọn hội thoại, tool sẽ tự động chọn tùy chọn ở dưới cùng.
-- Giả lập hành vi bấm phím ngẫu nhiên của con người và có các khoảng tạm nghỉ ngắn để tránh bị cơ chế chống gian lận phát hiện.
+- Khi xuất hiện bảng câu hỏi hoặc tùy chọn hội thoại, tool tự động chọn tùy chọn ở dưới cùng.
+- Giả lập hành vi bấm phím ngẫu nhiên của con người và có các khoảng tạm nghỉ ngắn để an toàn.
+
+---
+
+## 🖥️ Giao diện Trực quan (GUI)
+
+Phiên bản mới trang bị giao diện đồ họa hiện đại (**Dark Mode** theo phong cách Gaming/Slate), giúp bạn dễ dàng theo dõi và điều khiển mà không cần nhìn vào dòng lệnh đen trắng:
+
+- **🟢 Thẻ Trạng Thái Sống (Hero Status)**:
+  - Hiển thị trực quan trạng thái: `🟢 ĐANG CHẠY` / `⏸️ TẠM DỪNG` / `⚪ ĐÃ DỪNG`.
+  - Giám sát thời gian thực cửa sổ game: Phát hiện chính xác khi nào bạn đang ở trong Genshin Impact.
+  - Bộ đếm thời gian thực: Thống kê số lần tua thoại (`⏩`) và số lần chọn đáp án (`🎯`).
+- **🕹️ Phím Bấm Điều Khiển To Rõ**:
+  - Nút lớn `▶ BẮT ĐẦU (F8)` và `⏸ TẠM DỪNG (F9)`.
+  - Phím tắt toàn cục vẫn hoạt động song song mượt mà ngay cả khi đang thu nhỏ app.
+- **⚙️ Bảng Cài Đặt Nhanh**:
+  - Chọn phím bấm tương tác ngay trên menu (`F`, `Space`, `E`, `Enter`).
+  - **Hỗ trợ đầy đủ mọi chế độ hiển thị Genshin Impact**:
+    - **Cửa Sổ (Windowed)**: `1680×1050` (16:10), `1440×1080` (4:3), `1440×900`, `1366×768`, `1280×1024`, `1280×800`, `1280×720`, `1176×664`...
+    - **Toàn Màn Hình / Không Viền (Borderless / Fullscreen)**: `1920×1080`, 2K `2560×1440`, 4K `3840×2160`, UltraWide `2560×1080`, `3440×1440`.
+  - Nút `🔍 Quét Game`: Tự động tìm cửa sổ game, đo kích thước và vị trí (X, Y) chính xác trên màn hình.
+  - Tự động bám theo cửa sổ game: Dù bạn di chuyển cửa sổ Genshin đi đâu, tool tự động bám tọa độ vào trong game.
+  - Công tắc `Ghim trên cùng (Always on top)`: Giữ cửa sổ tool luôn nổi trên game.
+  - Công tắc `Mô phỏng người thật`: Bật/tắt ngẫu nhiên hóa độ trễ và nghỉ ngơi ngẫu nhiên.
+- **📋 Thông Báo Hệ Thống**:
+  - Chỉ ghi lại các thông báo quan trọng, ngắn gọn, không spam log từng lần click phím.
+  - Nút Xóa nhật ký và Reset bộ đếm thống kê.
 
 ---
 
 ## ✨ Các tính năng nổi bật
 
-- **Nhận diện hội thoại tự động**: Sử dụng nhận diện pixel để biết chính xác khi nào đoạn hội thoại đang chạy.
+- **Giao diện người dùng trực quan**: Đầy đủ đồ họa, không cần sửa file cấu hình thủ công.
+- **Hỗ trợ hoàn hảo Chế độ Cửa Sổ (Windowed Mode)**: Tự động tính tọa độ từ góc client của game, dù cửa sổ ở bất kỳ vị trí nào trên màn hình.
+- **Dò tìm đa điểm (Tolerance Patch Scan)**: Quét vùng lân cận ±3px quanh nút Auto và lựa chọn thoại, đảm bảo không bao giờ bị trượt pixel do co giãn màn hình.
+- **Nhận diện hội thoại tự động**: Dùng pixel detection kiểm tra nút Auto-Play và biểu tượng thoại.
 - **Tự động chọn đáp án**: Luôn chọn phương án đối thoại ở dòng dưới cùng.
-- **Hỗ trợ đa độ phân giải**: Tự động nhận diện và tính toán tọa độ tương thích với nhiều độ phân giải màn hình khác nhau (Full HD 1080p, 2K 1440p, 4K 2160p và màn hình siêu rộng UltraWide).
+- **Hỗ trợ đa độ phân giải**: Tự động nhận diện và tính toán tọa độ tương thích với nhiều độ phân giải màn hình (Full HD 1080p, 2K 1440p, 4K 2160p và màn hình UltraWide).
 - **Mô phỏng hành vi người thật (Human-like)**:
-    - Tần suất bấm phím ngẫu nhiên (dao động từ 0.12 đến 0.20 giây/lần).
-    - Tự động tạm nghỉ ngẫu nhiên từ 3 đến 8 giây (tỉ lệ 4% mỗi 30 giây).
+    - Tần suất bấm ngẫu nhiên (dao động từ 0.12 đến 0.20 giây/lần).
+    - Tự động tạm nghỉ ngẫu nhiên từ 3 đến 7 giây (mỗi 30 giây có tỉ lệ nghỉ).
 - **An toàn & Thông minh**:
     - Chỉ kích hoạt khi cửa sổ game Genshin Impact đang là cửa sổ hoạt động chính (Active Window).
     - Tự động nhận diện và không thao tác khi đang ở màn hình tải (Loading Screen).
-- **Khởi chạy 1 chạm**: Tích hợp sẵn file `run.bat` tự động kiểm tra môi trường, cài đặt thư viện và chạy tool.
+- **Khởi chạy 1 chạm**: File `run.bat` tự động kiểm tra môi trường, cài đặt thư viện và mở giao diện.
+- **Hỗ trợ cả 2 chế độ**: Chạy mặc định qua GUI đẹp mắt, hoặc chạy chế độ dòng lệnh qua `run.bat cli`.
 
 ---
 
@@ -50,8 +81,8 @@
 
 ### Yêu cầu phần cứng & Hệ điều hành
 
-- **Hệ điều hành**: Windows 10 / 11 (có hỗ trợ thư viện win32api).
-- **Màn hình**: Màn hình chính (nếu dùng nhiều màn hình, hãy để cửa sổ game hiển thị trên màn hình chính - Primary Display).
+- **Hệ điều hành**: Windows 10 / 11.
+- **Màn hình**: Màn hình chính (Primary Display).
 - **Quyền hạn**: Administrator (Cần quyền quản trị viên để gửi tín hiệu mô phỏng phím bấm vào game).
 
 ### Yêu cầu phần mềm
@@ -68,54 +99,41 @@
 
 ## 🚀 Cài đặt
 
-### Cách 1: Cài đặt tự động (Khuyến nghị)
+### Cách 1: Khởi chạy 1 chạm (Khuyến nghị)
 
-1. Nhấp chuột phải vào file **`run.bat`** trong thư mục dự án và chọn **"Run as administrator"** (Chạy với quyền quản trị viên).
+1. Nhấp chuột phải vào file **`run.bat`** và chọn **"Run as administrator"** (Chạy với quyền quản trị viên).
 2. File batch sẽ tự động:
     - Kiểm tra quyền Administrator.
-    - Kiểm tra phiên bản Python trên máy.
-    - Tự động cài đặt trình quản lý gói `uv` (nếu chưa có).
-    - Tải và cài đặt tất cả các thư viện cần thiết.
-    - Khởi động chương trình tự động.
+    - Cài đặt/cập nhật trình quản lý gói `uv` và các thư viện cần thiết.
+    - Tự động mở giao diện GUI của tool.
 
-### Cách 2: Cài đặt thủ công
+### Cách 2: Chạy thủ công
 
-1. Cài đặt Python 3.11+ từ [python.org](https://www.python.org/downloads/) (lưu ý tích chọn _Add Python to PATH_).
+1. Cài đặt Python 3.11+ từ [python.org](https://www.python.org/downloads/).
 2. Mở Command Prompt / PowerShell với quyền Administrator tại thư mục này.
-3. Cài đặt `uv`:
-    ```bash
-    pip install uv
-    ```
-4. Đồng bộ các thư viện:
+3. Đồng bộ thư viện:
     ```bash
     uv sync
     ```
-5. Chạy tool:
+4. Khởi chạy giao diện GUI:
     ```bash
-    uv run autoskip_dialogue.py
+    uv run gui.py
     ```
-6. Xoá các thư viện không cần thiết (nếu muốn):
-
-    ```bash
-    uv clean
-    uv cache clean
-
-    ```
+    *(Hoặc chạy bản dòng lệnh: `uv run autoskip_dialogue.py`)*
 
 ---
 
 ## 📖 Hướng dẫn sử dụng
 
-1. **Khởi động game Genshin Impact** và đảm bảo game đang chạy ở màn hình chính.
-2. **Chạy tool** bằng cách nhấp chuột phải vào file `run.bat` chọn **Run as administrator**.
-3. **Cấu hình lần đầu**:
-    - Chương trình sẽ tự động đo độ phân giải màn hình của bạn.
-    - Nhập phím tương tác trong game (thông thường là `F`, bạn chỉ cần nhấn Enter để chọn mặc định).
-    - Thông tin sẽ tự động được lưu vào file `.env` cho các lần chạy sau.
-4. **Kích hoạt Auto-Skip**:
-    - Chuyển sang cửa sổ Genshin Impact.
-    - Nhấn phím **F8** để bật tính năng tự động tua hội thoại.
-    - Khi có hội thoại, tool sẽ tự động nhấn phím để tua qua câu thoại và tự chọn đáp án.
+1. **Khởi động game Genshin Impact**.
+2. **Chạy tool** bằng cách nhấp chuột phải vào `run.bat` chọn **Run as administrator**.
+3. Cửa sổ giao diện trực quan sẽ hiện lên:
+   - Tool tự động nhận diện độ phân giải màn hình của bạn.
+   - Bạn có thể chỉnh lại phím tương tác trong ô cài đặt (mặc định là `F`).
+4. **Bắt đầu tua hội thoại**:
+   - Nhấn nút **▶ BẮT ĐẦU** trên giao diện, hoặc bấm phím tắt **F8**.
+   - Chuyển sang cửa sổ Genshin Impact và tận hưởng: mọi câu thoại và lựa chọn sẽ được tự động bỏ qua cực nhanh!
+   - Khi muốn tạm dừng, bấm **F9** hoặc nhấn **⏸ TẠM DỪNG**.
 
 ---
 
@@ -131,21 +149,16 @@
 
 ## ⚙️ Cấu hình hệ thống (.env)
 
-Sau lần chạy đầu tiên, chương trình sẽ tự động tạo hoặc cập nhật file `.env`:
+Tất cả cấu hình có thể điều chỉnh trực quan ngay trên GUI. Dữ liệu sẽ tự động đồng bộ vào file `.env`:
 
 ```env
 WIDTH=1920
 HEIGHT=1080
 CONFIRM_BUTTON=f
 DEVICE=mnk
+ALWAYS_ON_TOP=true
+HUMAN_SIMULATION=true
 ```
-
-- **WIDTH**: Chiều rộng màn hình (tính bằng pixel, tự động nhận diện).
-- **HEIGHT**: Chiều cao màn hình (tính bằng pixel, tự động nhận diện).
-- **CONFIRM_BUTTON**: Phím bấm tương tác trong game (mặc định là `f`).
-- **DEVICE**: Thiết bị đầu vào (`mnk` là bàn phím và chuột).
-
-_Lưu ý_: Nếu màn hình của bạn nhận sai độ phân giải, bạn có thể mở trực tiếp file `.env` bằng Notepad để chỉnh sửa thủ công.
 
 ---
 
@@ -158,7 +171,7 @@ _Lưu ý_: Nếu màn hình của bạn nhận sai độ phân giải, bạn có
 2. **Mô phỏng bấm phím**:
     - Sử dụng thư viện `pyautogui` để gửi tín hiệu nhấn phím `F`.
     - Khoảng cách giữa các lần nhấn phím được tạo ngẫu nhiên từ `0.12s - 0.20s` để tránh hành vi bất thường giống bot.
-    - Cứ mỗi 30 giây, script có tỉ lệ 4% tự động tạm dừng từ 3 đến 8 giây để giả lập người chơi đang nghỉ tay.
+    - Cứ mỗi 30 giây, script có tỉ lệ tự động tạm dừng từ 3 đến 7 giây để giả lập người chơi đang nghỉ tay.
 
 ---
 
@@ -167,9 +180,9 @@ _Lưu ý_: Nếu màn hình của bạn nhận sai độ phân giải, bạn có
 - **Tool không thể chạy hoặc báo lỗi quyền hạn**:
     - _Khắc phục_: Hãy chắc chắn rằng bạn nhấp chuột phải vào `run.bat` và chọn **Run as administrator**.
 - **Hội thoại không được tự động bỏ qua**:
-    - Hãy kiểm tra xem bạn đã bấm **F8** để kích hoạt chưa (console hiển thị `TRẠNG THÁI: ĐANG CHẠY`).
+    - Hãy kiểm tra xem bạn đã bấm **F8** để kích hoạt chưa (giao diện hiển thị `🟢 ĐANG CHẠY`).
     - Kiểm tra xem cửa sổ Genshin Impact có đang được chọn (Active) hay không.
     - Kiểm tra trong game mục **Cài đặt > Khác > Tự Động Phát Cốt Truyện** đã chuyển thành **Tắt** chưa.
     - Đảm bảo game đang hiển thị trên màn hình chính (Primary Display) nếu dùng nhiều màn hình.
 - **Bị sai độ phân giải**:
-    - Mở file `.env` và sửa lại thông số `WIDTH` và `HEIGHT` theo đúng độ phân giải màn hình của bạn.
+    - Nhấn nút **🔄 Quét màn hình** trên giao diện để tool tự đo lại độ phân giải chính xác.

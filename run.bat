@@ -68,17 +68,21 @@ echo [OK] Da cai dat uv thanh cong!
 echo.
 
 :: ============================================
-:: Khoi chay script Python
+:: Khoi chay script Python (Mac dinh giao dien GUI)
 :: ============================================
 :run_script
 color 0B
 echo ============================================
-echo Dang khoi chay Tool Tu Dong Bo Qua Hoi Thoai...
+echo Dang khoi chay Giao dien Tool Tu Dong Bo Qua Hoi Thoai...
 echo ============================================
 echo.
 color 0F
 
-uv run autoskip_dialogue.py
+if /i "%1"=="cli" (
+    uv run autoskip_dialogue.py
+) else (
+    uv run gui.py
+)
 set SCRIPT_EXIT_CODE=%errorlevel%
 
 echo.
