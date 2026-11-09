@@ -55,11 +55,35 @@ class Config:
         self.confirm_button: str = os.getenv("CONFIRM_BUTTON", "f").lower()
         self.device: str = os.getenv("DEVICE", "mnk")
         self.always_on_top: bool = os.getenv("ALWAYS_ON_TOP", "true").lower() in ("true", "1", "yes")
-        self.human_simulation: bool = os.getenv("HUMAN_SIMULATION", "true").lower() in ("true", "1", "yes")
         self.auto_window_mode: bool = os.getenv("AUTO_WINDOW_MODE", "true").lower() in ("true", "1", "yes")
         self.resolution_preset: str = os.getenv("RESOLUTION_PRESET", "auto")
 
-        # Khởi tạo file .env nếu chưa có
+        # Phím tắt toàn cục tùy chỉnh (mặc định là F8 và F9)
+        self.hotkey_start: str = os.getenv("HOTKEY_START", "f8").lower()
+        self.hotkey_pause: str = os.getenv("HOTKEY_PAUSE", "f9").lower()
+
+        # Chế độ tốc độ spam: "safe", "fast", "turbo", "extreme"
+        spam_mode_env = os.getenv("SPAM_MODE")
+        if spam_mode_env and spam_mode_env.lower() in ("safe", "fast", "turbo", "extreme"):
+            self.spam_mode: str = spam_mode_env.lower()
+        else:
+            self.spam_mode = "turbo"
+
+        # Tương thích ngược với human_simulation
+        self.human_simulation: bool = (self.spam_mode == "safe")
+
+        # Chế độ kích hoạt: "dialogue" (chỉ khi có hội thoại) | "always" (luôn spam khi ở trong game)
+        trigger_mode_env = os.getenv("TRIGGER_MODE", "dialogue").lower()
+        self.trigger_mode: str = trigger_mode_env if trigger_mode_env in ("dialogue", "always") else "dialogue"
+
+        # Số lần spam phím mỗi nhịp kích hoạt (burst count)
+        burst_env = os.getenv("BURST_COUNT", "2")
+        self.burst_count: int = int(burst_env) if burst_env.isdigit() and int(burst_env) > 0 else 2
+
+        # Kết hợp click chuột trái để tua và chọn đáp án siêu tốc
+        self.click_combo: bool = os.getenv("CLICK_COMBO", "false").lower() in ("true", "1", "yes")
+
+        # Khởi tạo hoặc cập nhật file .env nếu chưa có
         if not os.path.exists(self.env_path):
             self.save(
                 width=self.width,
@@ -67,6 +91,12 @@ class Config:
                 confirm_button=self.confirm_button,
                 device=self.device,
                 always_on_top=self.always_on_top,
+                hotkey_start=self.hotkey_start,
+                hotkey_pause=self.hotkey_pause,
+                spam_mode=self.spam_mode,
+                trigger_mode=self.trigger_mode,
+                burst_count=self.burst_count,
+                click_combo=self.click_combo,
                 human_simulation=self.human_simulation,
                 auto_window_mode=self.auto_window_mode,
                 resolution_preset=self.resolution_preset
@@ -75,7 +105,7 @@ class Config:
     def save(self, **kwargs: Any) -> None:
         """Lưu các thuộc tính vào file .env và cập nhật instance."""
         dotenv_file = find_dotenv(self.env_path) or self.env_path
-        
+
         # Đảm bảo file tồn tại
         if not os.path.exists(dotenv_file):
             with open(dotenv_file, "w", encoding="utf-8") as f:
@@ -86,3 +116,8 @@ class Config:
             env_key = key.upper()
             val_str = str(val).lower() if isinstance(val, bool) else str(val)
             set_key(dotenv_file, env_key, val_str, quote_mode="never")
+
+        # Đồng bộ human_simulation nếu spam_mode thay đổi
+        if "spam_mode" in kwargs:
+            self.human_simulation = (self.spam_mode == "safe")
+            set_key(dotenv_file, "HUMAN_SIMULATION", str(self.human_simulation).lower(), quote_mode="never")
