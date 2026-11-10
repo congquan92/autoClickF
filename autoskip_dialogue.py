@@ -31,6 +31,8 @@ def main():
         print("  [OK] Đang chạy với quyền Administrator.\n")
 
     config = Config()
+    for warning in config.warnings:
+        print(f'  [CẢNH BÁO] {warning}')
 
     mode_names = {
         "safe": "🐢 An toàn (Mô phỏng người thật, ~5 lần/giây)",

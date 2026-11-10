@@ -22,12 +22,12 @@
 
 **Genshin Impact Dialogue Auto-Skip Turbo** là công cụ tự động hóa tua nhanh lời thoại và tự động nhặt vật phẩm trong Genshin Impact với tốc độ cực cao:
 
-- 🚀 **Tốc độ siêu tốc (Siêu nhanh)**: Gửi tín hiệu trực tiếp qua DirectInput / Win32 API cấp hệ điều hành (0ms overhead), loại bỏ hoàn toàn độ trễ vô hình.
+- 🚀 **Gửi phím qua Win32**: Dùng `keybd_event` / `mouse_event` với thời gian giữ phím ngắn. Tốc độ thực tế phụ thuộc máy, tốc độ nhận diện và game.
 - 💥 **Spam nhiều lần liên hoàn (Burst Multi-Press)**: Cho phép gửi nhiều lần phím liên tục mỗi nhịp (1x, 2x, 3x, 5x), giúp đối thoại trôi qua trong chớp mắt.
 - 📜 **Tự động vượt màn hình dẫn chuyện (Black Cutscene / Narrative Monologue)**: Tự động phát hiện màn hình dẫn chuyện chữ trắng nền đen với dòng *"Nhấn để tiếp tục"* và biểu tượng thoi vàng ◆, tự động click / Space chuyển cảnh mượt mà.
-- 🛡️ **Bộ lọc chống đánh thường ngoài map (Anti-Normal Attack Spam)**: Phân tích bối cảnh nhiều điểm ảnh (multi-point contrast check), ngăn chặn hoàn toàn hiện tượng nhận diện nhầm mây, tuyết, cát sa mạc hay số sát thương làm nhân vật vô cớ vung kiếm đánh thường.
+- 🛡️ **Bộ lọc chống đánh thường ngoài map (Anti-Normal Attack Spam)**: Phân tích bối cảnh nhiều điểm ảnh để giảm nhận diện nhầm mây, tuyết, cát sa mạc hay số sát thương. Đây là bộ lọc theo màu, vẫn cần kiểm tra với hình ảnh thực tế trong game.
 - 🎛️ **Đa chế độ linh hoạt**: Người dùng có thể tùy chọn 4 chế độ tốc độ khác nhau và 2 cách thức kích hoạt tùy theo nhu cầu.
-- 🖱️ **Tùy chọn Combo Chuột Trái**: Kết hợp phím F và Click chuột trái giúp tua thoại nhanh gấp bội và tự động chọn phương án trả lời dưới cùng ngay lập tức.
+- 🖱️ **Tùy chọn Combo Chuột Trái**: Kết hợp phím tương tác và click để tua thoại. Với bảng đáp án, tool di chuyển tới đáp án thấp nhất nhận diện được rồi click một lần mỗi đợt, không gửi kèm burst phím F.
 - 🧭 **Chế độ Luôn Spam (Loot & Skip)**: Vừa tự động nhặt đồ / mở rương / hái hoa quả khi chạy map, vừa tua sạch đối thoại khi gặp NPC.
 
 ---
@@ -60,6 +60,7 @@ Tool cung cấp các chế độ tùy chỉnh ngay trên giao diện:
 ### 3. Tùy chọn nâng cao
 
 - **Nhịp spam (Burst Count)**: Chọn số lần nhấn phím mỗi đợt (`1x`, `2x`, `3x`, `5x`).
+- Safe dùng 1 lần/đợt; Fast tối đa 2 lần/đợt. Turbo và Extreme dùng nhịp đã chọn, kể cả `1x`. Các tần suất ở bảng trên chỉ là ước tính, chưa phải benchmark.
 - **+ Chuột Trái (Left Click Combo)**: Kết hợp Click chuột trái cùng với phím F để tua thoại thần tốc và tự động bấm chọn câu trả lời ở bảng thoại.
 
 ---
@@ -92,10 +93,11 @@ Mặc định công cụ sử dụng:
 > **💡 Tính năng Đổi phím 1 chạm (Hỗ trợ cả 2 Nút Chuột Hông)**:
 > - Trên giao diện có 2 nút `⌨ Đổi phím: F8` và `⌨ Đổi phím: F9`.
 > - Bạn chỉ cần nhấp vào nút đó (nút sẽ chuyển sang `🔴 Bấm phím / chuột...`), sau đó:
->   - **Bấm phím bất kỳ** trên bàn phím (F1-F12, phím chữ, phím số, Space, Numpad...).
+>   - **Bấm phím hợp lệ** trên bàn phím (F1-F11, phím chữ, phím số, Numpad...). Không dùng phím tương tác, Space, F12 hoặc phím đang gán cho tác vụ còn lại.
 >   - **HOẶC bấm 2 nút chuột bên hông**: **Mouse 4** (Chuột hông 1) hoặc **Mouse 5** (Chuột hông 2), chuột giữa (**Mouse 3**)!
 > - Tool sẽ nhận diện và gán ngay lập tức thành phím tắt mới.
 > - Bấm `Esc` để hủy.
+> - Tool tạm dừng khi bắt đầu đổi phím. F12 luôn đóng tool, kể cả khi đang đổi phím.
 > - Bấm nút `↺` để khôi phục phím tắt mặc định (F8 / F9).
 > - Phím tắt hoạt động toàn cục ngay cả khi đang thu nhỏ app hoặc đang trong game.
 
@@ -137,8 +139,38 @@ Các thiết lập được tự động lưu lại vào file `.env` mỗi khi b
 | `HOTKEY_PAUSE` | `f9` | Phím tắt tạm dừng |
 | `SPAM_MODE` | `turbo` | Chế độ tốc độ: `safe`, `fast`, `turbo`, `extreme` |
 | `TRIGGER_MODE` | `dialogue` | Cách kích hoạt: `dialogue` (khi có thoại), `always` (luôn spam) |
-| `BURST_COUNT` | `2` | Số lần nhấn phím mỗi nhịp: 1, 2, 3, 5 |
+| `BURST_COUNT` | `2` | Số nguyên từ 1 đến 5; GUI có sẵn 1, 2, 3, 5 |
 | `CLICK_COMBO` | `false` | Bật/tắt click chuột trái kèm theo: `true`/`false` |
-| `CONFIRM_BUTTON`| `f` | Phím tương tác trong game (`f`, `space`, `e`, `enter`...) |
+| `CONFIRM_BUTTON`| `f` | Một phím `a`–`z`, `0`–`9`, `space` hoặc `enter` |
 | `ALWAYS_ON_TOP`| `true` | Ghim cửa sổ tool luôn nổi trên game |
 | `AUTO_WINDOW_MODE`| `true` | Tự động thích ứng kích thước cửa sổ game |
+
+`WIDTH` và `HEIGHT`, nếu đặt thủ công, phải là số nguyên trong khoảng 1–16384.
+Cấu hình nạp sai được thay bằng giá trị mặc định trong bộ nhớ và hiện cảnh báo.
+Thay đổi không hợp lệ trên GUI bị từ chối; thiết lập đang dùng được giữ lại.
+File cấu hình được lưu tại đường dẫn đã chọn khi khởi tạo, không đổi theo thư mục làm việc.
+
+## Các sửa sau rà soát
+
+- Nhận diện game qua executable `GenshinImpact.exe` / `YuanShen.exe`, không dựa vào tiêu đề trình duyệt. Nếu không truy vấn được tiến trình, tool không gửi thao tác.
+- Kiểm tra lại cửa sổ hiện hành và trạng thái chạy trước từng lần nhấn/click. Phím và nút chuột luôn được nhả sau lần nhấn hiện tại.
+- Không cho phím Start/Pause trùng nhau hoặc trùng phím tool tự gửi. Bỏ qua sự kiện bàn phím được phần mềm tạo ra khi xử lý hotkey.
+- Giữ vị trí gốc của cửa sổ game khi chọn độ phân giải thủ công.
+- F12 đóng cả GUI và engine; không còn hiển thị đang chạy sau khi worker đã dừng.
+- Extreme tôn trọng nhịp `1x`; đáp án được click tại tọa độ nhận diện được.
+- Kiểm tra cấu hình trước khi lưu; lỗi ghi file không làm đổi cấu hình đang chạy.
+- Thêm test hồi quy, bỏ mã không dùng và ngừng theo dõi bytecode Python.
+
+Việc kiểm tra focus và gửi input là hai lời gọi riêng; vẫn có một khoảng rất ngắn giữa chúng.
+Độ chính xác nhận diện pixel và tốc độ thực tế cần được thử trực tiếp trong game.
+
+## Kiểm thử
+
+Chạy từ thư mục dự án trên Windows:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest discover -v
+```
+
+Hoặc: `uv run --frozen python -B -m unittest discover -v`.
+Test dùng file cấu hình tạm và mô phỏng input/cửa sổ/pixel, không gửi phím/click thật hay bật hook toàn cục.

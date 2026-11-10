@@ -1,11 +1,7 @@
 import datetime
-import os
 import queue
 import re
-import sys
-import threading
-import tkinter as tk
-from typing import Any, Optional, Tuple
+from typing import Optional
 
 import customtkinter as ctk
 
@@ -15,7 +11,6 @@ from core.engine import (
     format_key_display,
     get_genshin_window_info,
     is_admin,
-    parse_key_event,
 )
 
 # Thiết lập theme mặc định cho giao diện
@@ -66,6 +61,7 @@ class AutoSkipGUI(ctk.CTk):
 
         # Trạng thái đang lắng nghe gán phím tắt (None, "start", "pause")
         self.recording_target: Optional[str] = None
+        self._closing = False
 
         # Hàng đợi giao tiếp thread-safe giữa Engine và GUI
         self.event_queue: queue.Queue = queue.Queue()
@@ -103,6 +99,8 @@ class AutoSkipGUI(ctk.CTk):
         # Thông báo khởi động ngắn gọn
         start_disp = format_key_display(self.config.hotkey_start)
         self._append_log(f"Đã sẵn sàng. Bấm [{start_disp}] để bắt đầu tua thoại.", "info")
+        for warning in self.config.warnings:
+            self._append_log(warning, 'warning')
 
         # Bắt đầu Engine chạy ngầm
         self.engine.run_in_background()
@@ -544,10 +542,15 @@ class AutoSkipGUI(ctk.CTk):
     # ========================== XỬ LÝ SỰ KIỆN ==========================
     def _process_events(self):
         """Đọc và xử lý các sự kiện từ Engine gửi qua queue (thread-safe)."""
+        if self._closing:
+            return
         try:
             while not self.event_queue.empty():
                 event_type, payload = self.event_queue.get_nowait()
                 if event_type == "status":
+                    if payload == 'stopped':
+                        self._on_close()
+                        return
                     self._update_status_ui(payload)
                 elif event_type == "log":
                     msg, cat = payload
@@ -648,6 +651,7 @@ class AutoSkipGUI(ctk.CTk):
             self._cancel_key_binding()
             return
 
+        self.engine.pause()
         self.recording_target = "start"
         self.engine.recording_hotkey_for = "start"
         self.btn_bind_start.configure(
@@ -668,6 +672,7 @@ class AutoSkipGUI(ctk.CTk):
             self._cancel_key_binding()
             return
 
+        self.engine.pause()
         self.recording_target = "pause"
         self.engine.recording_hotkey_for = "pause"
         self.btn_bind_pause.configure(
@@ -692,7 +697,8 @@ class AutoSkipGUI(ctk.CTk):
     def _on_reset_keys_click(self):
         self.recording_target = None
         self.engine.recording_hotkey_for = None
-        self.config.save(hotkey_start="f8", hotkey_pause="f9")
+        if not self._save_config(hotkey_start="f8", hotkey_pause="f9"):
+            return
         self._refresh_hotkey_buttons()
         self._update_status_ui(self.engine.status)
         self._append_log("Đã khôi phục phím tắt mặc định: [F8] Bắt đầu | [F9] Tạm dừng.", "success")
@@ -724,12 +730,8 @@ class AutoSkipGUI(ctk.CTk):
             self._append_log("Đã hủy thay đổi phím tắt.", "info")
             return
 
-        if key_name.startswith("error_conflict_confirm"):
-            conf = key_name.split(":")[-1].upper()
-            self._append_log(
-                f"Không thể gán phím [{conf}] vì đây là phím tương tác trong game! Hãy chọn phím khác (F1-F12, phím số, nút chuột...).",
-                "warning"
-            )
+        if key_name.startswith('error:'):
+            self._append_log(key_name.split(':', 1)[1], 'warning')
             return
 
         disp_details = {
@@ -747,6 +749,14 @@ class AutoSkipGUI(ctk.CTk):
             return "break"
 
     # ========================== CALLBACKS NGƯỜI DÙNG ==========================
+    def _save_config(self, **changes) -> bool:
+        try:
+            self.config.save(**changes)
+        except (ValueError, OSError) as exc:
+            self._append_log(f'Không thể lưu thiết lập: {exc}', 'warning')
+            return False
+        return True
+
     def _on_start_click(self):
         self.engine.start()
 
@@ -759,7 +769,9 @@ class AutoSkipGUI(ctk.CTk):
             if label == selected_label:
                 mode_val = val
                 break
-        self.config.save(spam_mode=mode_val)
+        if not self._save_config(spam_mode=mode_val):
+            self.seg_speed.set(next(label for label, value in SPEED_MODES if value == self.config.spam_mode))
+            return
         desc = {
             "safe": "Mô phỏng người thật, an toàn (~5 lần/giây)",
             "fast": "Nhanh, đều đặn (~15-20 lần/giây)",
@@ -774,32 +786,43 @@ class AutoSkipGUI(ctk.CTk):
             if label == selected_label:
                 trigger_val = val
                 break
-        self.config.save(trigger_mode=trigger_val)
+        if not self._save_config(trigger_mode=trigger_val):
+            self.seg_trigger.set(next(label for label, value in TRIGGER_MODES if value == self.config.trigger_mode))
+            return
         desc = "Chỉ khi phát hiện hội thoại" if trigger_val == "dialogue" else "Luôn spam khi vào game (Loot đồ & Skip thoại)"
         self._append_log(f"Chế độ: [{desc}]", "info")
 
     def _on_key_change(self, value: str):
         btn = value.strip().lower()
-        self.config.save(confirm_button=btn)
+        if not self._save_config(confirm_button=btn):
+            self.key_combo.set(self.config.confirm_button.upper())
+            return
+        self.key_combo.set(self.config.confirm_button.upper())
         self._append_log(f"Đã đổi phím tương tác: [{btn.upper()}]", "info")
 
     def _on_burst_change(self, value: str):
         try:
             num = int(value.replace("x", "").strip())
-            self.config.save(burst_count=num)
-            self._append_log(f"Đã đặt nhịp spam: {num} lần / đợt", "info")
-        except Exception:
-            pass
+        except ValueError:
+            self._append_log('Nhịp spam phải là số nguyên trong khoảng 1–5.', 'warning')
+        else:
+            if self._save_config(burst_count=num):
+                self._append_log(f"Đã đặt nhịp spam: {num} lần / đợt", "info")
+        self.burst_combo.set(f'{self.config.burst_count}x')
 
     def _on_click_combo_toggle(self):
         is_on = bool(self.switch_click_combo.get())
-        self.config.save(click_combo=is_on)
+        if not self._save_config(click_combo=is_on):
+            (self.switch_click_combo.select if self.config.click_combo else self.switch_click_combo.deselect)()
+            return
         msg = "Đã bật: Kèm Click chuột trái (Tua & chọn siêu tốc)" if is_on else "Đã tắt: Kèm Click chuột trái"
         self._append_log(msg, "info")
 
     def _on_res_preset_change(self, selected: str):
         if "Tự động" in selected:
-            self.config.save(auto_window_mode=True, resolution_preset="auto")
+            if not self._save_config(auto_window_mode=True, resolution_preset="auto"):
+                self._init_res_combo_selection()
+                return
             self._append_log("Đã bật: Tự động theo cửa sổ game", "success")
             return
 
@@ -807,7 +830,9 @@ class AutoSkipGUI(ctk.CTk):
         if match:
             w = int(match.group(1))
             h = int(match.group(2))
-            self.config.save(width=w, height=h, auto_window_mode=False, resolution_preset=selected)
+            if not self._save_config(width=w, height=h, auto_window_mode=False, resolution_preset=selected):
+                self._init_res_combo_selection()
+                return
             self.res_badge.configure(text=f"📐 {w}x{h}")
             self._append_log(f"Đã chọn độ phân giải: {w}x{h}", "info")
 
@@ -817,7 +842,8 @@ class AutoSkipGUI(ctk.CTk):
         if hwnd and client_w > 100 and client_h > 100:
             mode = "Cửa Sổ" if is_windowed else "Toàn Màn Hình"
             pos = f" tại ({client_x}, {client_y})" if is_windowed else ""
-            self.config.save(width=client_w, height=client_h)
+            if not self._save_config(width=client_w, height=client_h):
+                return
             self.res_badge.configure(text=f"📐 {client_w}x{client_h}")
 
             matched = False
@@ -832,21 +858,26 @@ class AutoSkipGUI(ctk.CTk):
             self._append_log(f"Đã tìm thấy game: {client_w}x{client_h} [{mode}]{pos}", "success")
         else:
             w, h = get_screen_resolution()
-            self.config.save(width=w, height=h)
+            if not self._save_config(width=w, height=h):
+                return
             self.res_badge.configure(text=f"📐 {w}x{h}")
             self._append_log(f"Chưa mở game. Đã nhận diện màn hình: {w}x{h}", "info")
 
     def _on_topmost_toggle(self):
         is_top = bool(self.switch_topmost.get())
+        if not self._save_config(always_on_top=is_top):
+            (self.switch_topmost.select if self.config.always_on_top else self.switch_topmost.deselect)()
+            return
         self.wm_attributes("-topmost", is_top)
-        self.config.save(always_on_top=is_top)
         msg = "Đã ghim cửa sổ trên cùng" if is_top else "Đã bỏ ghim cửa sổ"
         self._append_log(msg, "info")
 
     def _on_close(self):
+        if self._closing:
+            return
+        self._closing = True
         self.engine.stop()
         self.destroy()
-        sys.exit(0)
 
 
 def main():

@@ -23,7 +23,8 @@
 .idea/**/uiDesigner.xml
 .idea/**/dbnavigator.xml
 
-_pycache__/
+__pycache__/
+*.py[cod]
 # Gradle
 .idea/**/gradle.xml
 .idea/**/libraries

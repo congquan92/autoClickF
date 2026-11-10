@@ -1,19 +1,20 @@
 import ctypes
+from ctypes import wintypes
 import os
-import sys
 import threading
 from random import randint, uniform
 from time import perf_counter, sleep
 from typing import Any, Callable, Optional, Tuple, Union
 
+import win32api
 import win32gui
 import win32process
-from pyautogui import getActiveWindowTitle, pixel  # type: ignore[import-untyped]
+from pyautogui import pixel  # type: ignore[import-untyped]
 import pyautogui  # type: ignore[import-untyped]
 from pynput.keyboard import Key, KeyCode, Listener as KeyListener  # type: ignore[import-untyped]
 from pynput.mouse import Button, Listener as MouseListener  # type: ignore[import-untyped]
 
-from core.config import Config
+from core.config import CONFIRM_KEYS, Config
 
 # Thiết lập DPI awareness
 try:
@@ -29,6 +30,11 @@ pyautogui.PAUSE = 0.0
 pyautogui.FAILSAFE = False
 
 user32 = ctypes.windll.user32
+kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+kernel32.QueryFullProcessImageNameW.argtypes = [
+    wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
+]
+kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
 
 # ========================== DIRECTINPUT / WIN32 KEY & MOUSE ==========================
 # Bảng ánh xạ phím thông dụng sang Virtual Key code
@@ -56,29 +62,29 @@ MOUSEEVENTF_LEFTUP = 0x0004
 
 
 def fast_key_press(key_char: str, hold_sec: float = 0.005) -> None:
-    """Gửi tín hiệu phím chuẩn qua DirectInput scan code với tốc độ mili-giây."""
+    """Gửi một lần nhấn phím qua Win32 và luôn nhả phím."""
     k = key_char.strip().lower()
-    vk = VK_MAP.get(k)
-    if vk is None:
-        if len(k) == 1:
-            res = user32.VkKeyScanW(ord(k))
-            vk = res & 0xFF if res != -1 else 0x46
-        else:
-            vk = 0x46
+    if k not in CONFIRM_KEYS:
+        raise ValueError(f'Phím tương tác không được hỗ trợ: {key_char}')
+    vk = VK_MAP[k] if k in VK_MAP else ord(k.upper())
 
     scan = user32.MapVirtualKeyW(vk, 0)
     user32.keybd_event(vk, scan, KEYEVENTF_KEYDOWN, 0)
-    if hold_sec > 0:
-        sleep(hold_sec)
-    user32.keybd_event(vk, scan, KEYEVENTF_KEYUP, 0)
+    try:
+        if hold_sec > 0:
+            sleep(hold_sec)
+    finally:
+        user32.keybd_event(vk, scan, KEYEVENTF_KEYUP, 0)
 
 
 def fast_mouse_click(hold_sec: float = 0.004) -> None:
     """Gửi tín hiệu click chuột trái trực tiếp qua Win32 API."""
     user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    if hold_sec > 0:
-        sleep(hold_sec)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    try:
+        if hold_sec > 0:
+            sleep(hold_sec)
+    finally:
+        user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
 
 def parse_key_event(key: Union[Key, KeyCode, None]) -> str:
@@ -185,40 +191,30 @@ def is_admin() -> bool:
         return False
 
 
-def get_current_window_title() -> str:
-    """Lấy tiêu đề cửa sổ đang active."""
+def get_process_executable(pid: int) -> str:
+    """Đọc tên executable bằng quyền truy vấn tiến trình tối thiểu."""
+    process = win32api.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
     try:
-        title = getActiveWindowTitle()
-        if title:
-            return title.strip()
-    except Exception:
-        pass
-    try:
-        hwnd = win32gui.GetForegroundWindow()
-        if hwnd:
-            return win32gui.GetWindowText(hwnd).strip()
-    except Exception:
-        pass
-    return ""
+        buffer = ctypes.create_unicode_buffer(32768)
+        size = wintypes.DWORD(len(buffer))
+        if not kernel32.QueryFullProcessImageNameW(int(process), 0, buffer, ctypes.byref(size)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return os.path.basename(buffer.value)
+    finally:
+        process.Close()
 
 
 def is_real_genshin_window(hwnd: int) -> bool:
-    """Kiểm tra cửa sổ có đúng là Genshin Impact không (loại trừ cửa sổ của chính tool)."""
-    if not hwnd or not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
-        return False
+    """Chỉ nhận cửa sổ thuộc executable game; từ chối khi không xác minh được."""
     try:
+        if not hwnd or not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
+            return False
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
         if pid == os.getpid():
             return False
+        return get_process_executable(pid).casefold() in {'genshinimpact.exe', 'yuanshen.exe'}
     except Exception:
-        pass
-    title = win32gui.GetWindowText(hwnd).strip()
-    t_lower = title.lower()
-    if "auto-skip" in t_lower or "autoclick" in t_lower or "dialogue" in t_lower:
         return False
-    if "genshin" in t_lower or "yuanshen" in t_lower or "原神" in title:
-        return True
-    return False
 
 
 def get_genshin_window_info() -> Tuple[bool, Optional[int], str, int, int, int, int, bool]:
@@ -263,7 +259,7 @@ def get_genshin_window_info() -> Tuple[bool, Optional[int], str, int, int, int, 
         client_h = rect[3] - rect[1]
 
         # Kiểm tra xem có phải cửa sổ (Windowed) hay toàn màn hình
-        is_windowed = bool(client_x > 0 or client_y > 0)
+        is_windowed = bool(client_x != 0 or client_y != 0)
         is_fg = bool(target_hwnd == fg_hwnd)
 
         return is_fg, target_hwnd, target_title, client_x, client_y, client_w, client_h, is_windowed
@@ -495,19 +491,19 @@ class AutoSkipEngine:
         screen_higher_y: int,
         cur_w: int = 1920,
         cur_h: int = 1080,
-    ) -> Tuple[bool, bool]:
-        """Kiểm tra có lựa chọn hội thoại hay không và chống nhận diện nhầm với vật thể trắng ngoài map."""
+    ) -> Optional[Tuple[int, int]]:
+        """Trả về vị trí click của đáp án thấp nhất nhận diện được, hoặc None."""
         # 1. Kiểm tra màn hình tải trắng
         try:
             load_px = pixel(screen_load_x, screen_load_y)
             if self.is_white_like(load_px, threshold=250):
-                return False, False
+                return None
         except Exception:
-            pass
+            return None
 
         # 2. Quét nhanh vị trí biểu tượng đối thoại
         mid_y = (screen_lower_y + screen_higher_y) // 2
-        for target_y in [screen_lower_y, screen_higher_y, mid_y]:
+        for target_y in sorted({screen_lower_y, screen_higher_y, mid_y}, reverse=True):
             try:
                 px = pixel(screen_diag_x, target_y)
                 if self.is_white_like(px, threshold=210) or self.is_color_close(px, (236, 229, 216), tol=30):
@@ -536,11 +532,11 @@ class AutoSkipEngine:
                     if self.is_white_like(px_bubble_t, 215) and self.is_white_like(px_bubble_b, 215):
                         continue
 
-                    return True, True
+                    return x_bubble, target_y
             except Exception:
                 pass
 
-        return False, False
+        return None
 
     def is_loading_screen(self, screen_load_x: int, screen_load_y: int) -> bool:
         """Kiểm tra xem có phải màn hình tải trắng của game không."""
@@ -551,13 +547,37 @@ class AutoSkipEngine:
             return False
 
     # ========================== THAO TÁC PHÍM & SPAM ==========================
-    def _execute_spam_burst(self, key_char: str, burst_count: int, hold_sec: float, with_click: bool) -> int:
-        """Thực hiện chuỗi spam phím/chuột nhiều lần liên tiếp không độ trễ."""
+    def _can_send_input(self, hwnd: Optional[int]) -> bool:
+        if not hwnd or self.status != 'running' or self._stop_event.is_set() or self.recording_hotkey_for:
+            return False
+        try:
+            return win32gui.GetForegroundWindow() == hwnd
+        except Exception:
+            return False
+
+    def _execute_spam_burst(
+        self, key_char: str, burst_count: int, hold_sec: float, with_click: bool,
+        hwnd: Optional[int], click_position: Optional[Tuple[int, int]] = None,
+    ) -> int:
+        """Kiểm tra lại quyền gửi trước từng thao tác; đáp án chỉ click một lần."""
+        if click_position is not None:
+            if not self._can_send_input(hwnd):
+                return 0
+            pyautogui.moveTo(*click_position, duration=0)
+            if not self._can_send_input(hwnd):
+                return 0
+            fast_mouse_click(hold_sec=hold_sec)
+            return 1
+
         executed = 0
         for _ in range(burst_count):
+            if not self._can_send_input(hwnd):
+                break
             fast_key_press(key_char, hold_sec=hold_sec)
             executed += 1
             if with_click:
+                if not self._can_send_input(hwnd):
+                    break
                 fast_mouse_click(hold_sec=hold_sec)
         return executed
 
@@ -567,7 +587,7 @@ class AutoSkipEngine:
         Trả về: (interval_sec, burst_count, hold_sec, allow_break)
         """
         mode = self.config.spam_mode.lower()
-        cfg_burst = max(1, self.config.burst_count)
+        cfg_burst = max(1, min(5, self.config.burst_count))
 
         if mode == "safe":
             # Mô phỏng người thật: chậm, ngẫu nhiên, có nghỉ ngơi
@@ -583,7 +603,7 @@ class AutoSkipEngine:
         elif mode == "extreme":
             # Chế độ Điên cuồng: ~80-100+ lần/giây, tốc độ tối đa
             interval = 0.008
-            burst = max(2, cfg_burst if cfg_burst >= 2 else 3)
+            burst = cfg_burst
             return interval, burst, 0.002, False
 
         else:  # "turbo" (Mặc định)
@@ -620,7 +640,7 @@ class AutoSkipEngine:
                     self.on_stats_update(self.total_skips, self.total_choices, self.current_cps)
 
             # Nếu đang pause
-            if self.status == "paused":
+            if self.status != "running":
                 sleep(0.15)
                 last_press = perf_counter()
                 continue
@@ -634,7 +654,7 @@ class AutoSkipEngine:
                 off_x, off_y = client_x, client_y
             else:
                 cur_w, cur_h = self.config.width, self.config.height
-                off_x, off_y = 0, 0
+                off_x, off_y = (client_x, client_y) if hwnd else (0, 0)
 
             # Cập nhật thông tin cửa sổ hiện tại
             self.current_window_info.update({
@@ -683,6 +703,7 @@ class AutoSkipEngine:
             dialogue_active = False
             dialogue_playing = False
             is_choice = False
+            choice_position = None
 
             # Kiểm tra màn hình dẫn chuyện chữ trắng nền đen ('Nhấn để tiếp tục')
             is_narrative = self.is_narrative_screen(off_x, off_y, cur_w, cur_h)
@@ -698,17 +719,19 @@ class AutoSkipEngine:
 
                 # Kiểm tra xem có hội thoại hoặc lựa chọn đáp án không
                 dialogue_playing = self.is_dialogue_playing(screen_play_x, screen_play_y, cur_w, cur_h)
-                _, is_choice = self.is_dialogue_option_available(
+                choice_position = self.is_dialogue_option_available(
                     screen_load_x, screen_load_y, screen_diag_x, screen_lower_y, screen_higher_y, cur_w, cur_h
                 )
+                is_choice = choice_position is not None
                 dialogue_active = True
             else:
                 # Chế độ Tự Động Nhận Diện Thoại:
                 dialogue_playing = self.is_dialogue_playing(screen_play_x, screen_play_y, cur_w, cur_h)
-                option_detected, is_choice = self.is_dialogue_option_available(
+                choice_position = self.is_dialogue_option_available(
                     screen_load_x, screen_load_y, screen_diag_x, screen_lower_y, screen_higher_y, cur_w, cur_h
                 )
-                dialogue_active = dialogue_playing or option_detected
+                is_choice = choice_position is not None
+                dialogue_active = dialogue_playing or is_choice
 
             if not dialogue_active:
                 sleep(0.04)
@@ -720,7 +743,7 @@ class AutoSkipEngine:
                 if self._should_take_break():
                     break_sec = uniform(3.0, 5.0)
                     self.log(f"Tạm nghỉ {break_sec:.1f}s mô phỏng người thật...", "break")
-                    sleep(break_sec)
+                    self._stop_event.wait(break_sec)
                     last_press = perf_counter()
                     continue
 
@@ -729,11 +752,11 @@ class AutoSkipEngine:
                 # Màn hình dẫn chuyện: Cần Click chuột trái hoặc Space để chuyển câu (giữ nhịp êm ái ~0.15s)
                 narrative_interval = max(0.15, interval)
                 if now - last_press >= narrative_interval:
-                    fast_key_press("space", hold_sec=hold_sec)
-                    fast_mouse_click(hold_sec=hold_sec)
-                    self.total_skips += 1
-                    self._recent_clicks += 1
-                    self.log("Đang tự động bấm qua màn hình dẫn chuyện ('Nhấn để tiếp tục')...", "skip", throttle_sec=3.0)
+                    executed = self._execute_spam_burst('space', 1, hold_sec, True, hwnd)
+                    self.total_skips += executed
+                    self._recent_clicks += executed
+                    if executed:
+                        self.log("Đang tự động bấm qua màn hình dẫn chuyện ('Nhấn để tiếp tục')...", "skip", throttle_sec=3.0)
                     last_press = perf_counter()
             elif now - last_press >= interval:
                 confirm_key = self.config.confirm_button.lower()
@@ -754,7 +777,9 @@ class AutoSkipEngine:
                     confirm_key,
                     burst_count=burst,
                     hold_sec=hold_sec,
-                    with_click=with_click
+                    with_click=with_click,
+                    hwnd=hwnd,
+                    click_position=choice_position,
                 )
 
                 if is_choice:
@@ -771,6 +796,8 @@ class AutoSkipEngine:
     # ========================== ĐIỀU KHIỂN & PHÍM TẮT ==========================
     def start(self) -> None:
         """Kích hoạt chạy Auto-Skip."""
+        if self._stop_event.is_set():
+            return
         self.status = "running"
         if self.on_status_change:
             self.on_status_change("running")
@@ -814,30 +841,13 @@ class AutoSkipEngine:
         if not key_name:
             return
 
+        if key_name == 'f12':
+            self.stop()
+            return
+
         # 1. Nếu đang ở chế độ gán phím tắt mới
         if self.recording_hotkey_for:
-            target = self.recording_hotkey_for
-            self.recording_hotkey_for = None
-
-            if key_name == "esc":
-                if self.on_hotkey_recorded:
-                    self.on_hotkey_recorded(target, "cancelled")
-                return
-
-            # Kiểm tra trùng với phím tương tác trong game (ví dụ 'f')
-            if key_name == self.config.confirm_button.lower():
-                if self.on_hotkey_recorded:
-                    self.on_hotkey_recorded(target, f"error_conflict_confirm:{key_name}")
-                return
-
-            # Lưu phím tắt mới
-            if target == "start":
-                self.config.save(hotkey_start=key_name)
-            elif target == "pause":
-                self.config.save(hotkey_pause=key_name)
-
-            if self.on_hotkey_recorded:
-                self.on_hotkey_recorded(target, key_name)
+            self._finish_hotkey_recording(key_name)
             return
 
         # 2. Xử lý phím tắt hoạt động thông thường
@@ -848,8 +858,18 @@ class AutoSkipEngine:
             self.start()
         elif key_name == pause_key:
             self.pause()
-        elif key_name == "f12":
-            self.stop()
+
+    def _finish_hotkey_recording(self, key_name: str) -> None:
+        target = self.recording_hotkey_for
+        self.recording_hotkey_for = None
+        result = 'cancelled' if key_name == 'esc' else key_name
+        if key_name != 'esc':
+            try:
+                self.config.save(**{f'hotkey_{target}': key_name})
+            except (ValueError, OSError) as exc:
+                result = f'error:{exc}'
+        if self.on_hotkey_recorded:
+            self.on_hotkey_recorded(target, result)
 
     def _on_mouse_click(self, x: int, y: int, button: Any, pressed: bool) -> None:
         if not pressed:
@@ -861,16 +881,7 @@ class AutoSkipEngine:
 
         # 1. Nếu đang ở chế độ gán phím tắt mới (hỗ trợ Mouse 4, Mouse 5, Mouse 3)
         if self.recording_hotkey_for:
-            target = self.recording_hotkey_for
-            self.recording_hotkey_for = None
-
-            if target == "start":
-                self.config.save(hotkey_start=mouse_name)
-            elif target == "pause":
-                self.config.save(hotkey_pause=mouse_name)
-
-            if self.on_hotkey_recorded:
-                self.on_hotkey_recorded(target, mouse_name)
+            self._finish_hotkey_recording(mouse_name)
             return
 
         # 2. Xử lý kích hoạt / tạm dừng bình thường qua nút chuột
@@ -884,12 +895,17 @@ class AutoSkipEngine:
 
     def run_in_background(self) -> None:
         """Khởi động worker thread, keyboard listener và mouse listener toàn cục."""
+        if self._worker_thread and self._worker_thread.is_alive():
+            return
         self._stop_event.clear()
         self._worker_thread = threading.Thread(target=self._loop, daemon=True)
         self._worker_thread.start()
 
         try:
-            self._listener = KeyListener(on_press=self._on_key_press)
+            self._listener = KeyListener(
+                on_press=self._on_key_press,
+                win32_event_filter=lambda msg, data: not (data.flags & 0x10),  # LLKHF_INJECTED
+            )
             self._listener.start()
         except Exception as e:
             self.log(f"Không thể kích hoạt hook bàn phím toàn cục: {e}", "warning")
@@ -902,6 +918,8 @@ class AutoSkipEngine:
 
     def stop(self) -> None:
         """Dừng hoàn toàn engine."""
+        if self._stop_event.is_set():
+            return
         self.status = "stopped"
         self._stop_event.set()
         if self._listener:
@@ -914,6 +932,8 @@ class AutoSkipEngine:
                 self._mouse_listener.stop()
             except Exception:
                 pass
+        if self._worker_thread and self._worker_thread is not threading.current_thread():
+            self._worker_thread.join(timeout=1.0)
         if self.on_status_change:
             self.on_status_change("stopped")
         self.log("ĐÃ DỪNG chương trình.", "info")

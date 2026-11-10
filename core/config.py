@@ -1,7 +1,36 @@
 import os
 import ctypes
-from typing import Tuple, Dict, Any
-from dotenv import find_dotenv, load_dotenv, set_key
+from pathlib import Path
+import re
+import tempfile
+import threading
+from typing import Tuple, Any
+from dotenv import dotenv_values, set_key
+
+
+CONFIRM_KEYS = frozenset('abcdefghijklmnopqrstuvwxyz0123456789') | {'space', 'enter'}
+HOTKEY_NAMES = {
+    'esc', 'tab', 'space', 'enter', 'backspace', 'delete', 'insert', 'home', 'end',
+    'page_up', 'page_down', 'up', 'down', 'left', 'right', 'caps_lock', 'num_lock',
+    'scroll_lock', 'print_screen', 'pause', 'shift', 'shift_l', 'shift_r', 'ctrl',
+    'ctrl_l', 'ctrl_r', 'alt', 'alt_l', 'alt_r', 'alt_gr', 'cmd', 'cmd_l', 'cmd_r',
+    'menu', 'media_play_pause', 'media_volume_mute', 'media_volume_down',
+    'media_volume_up', 'media_previous', 'media_next', 'mouse3', 'mouse4', 'mouse5',
+    'num_mult', 'num_add', 'num_sub', 'num_dec', 'num_div',
+} | {f'f{i}' for i in range(1, 25)} | {f'num_{i}' for i in range(10)}
+
+
+def validate_hotkeys(start: str, pause: str, confirm: str) -> None:
+    for key in (start, pause):
+        valid = (len(key) == 1 and key.isprintable() and not key.isspace()) or key in HOTKEY_NAMES
+        if re.fullmatch(r'vk_\d{1,3}', key):
+            valid = 0 <= int(key[3:]) <= 255
+        if not valid:
+            raise ValueError(f'Phím tắt không được hỗ trợ: {key}')
+        if key in {'f12', 'space', confirm}:
+            raise ValueError(f'Không thể dùng [{key.upper()}]: phím được dành cho thao tác của tool.')
+    if start == pause:
+        raise ValueError('Phím Bắt đầu và Tạm dừng phải khác nhau.')
 
 try:
     from win32api import GetSystemMetrics  # type: ignore[import-untyped]
@@ -40,84 +69,84 @@ class Config:
     """Quản lý nạp và lưu cấu hình cho Auto-Skip."""
 
     def __init__(self, env_path: str = ".env"):
-        self.env_path = env_path
+        self.env_path = str(Path(env_path).resolve())
+        self._lock = threading.RLock()
         self.load()
 
     def load(self) -> None:
-        load_dotenv(self.env_path, override=True)
         detected_w, detected_h = get_screen_resolution()
+        defaults = {
+            'width': detected_w, 'height': detected_h, 'confirm_button': 'f',
+            'always_on_top': True, 'auto_window_mode': True, 'resolution_preset': 'auto',
+            'hotkey_start': 'f8', 'hotkey_pause': 'f9', 'spam_mode': 'turbo',
+            'trigger_mode': 'dialogue', 'burst_count': 2, 'click_combo': False,
+        }
+        values = {**os.environ, **dotenv_values(self.env_path)}
+        self.warnings = []
+        for key, default in defaults.items():
+            value = values.get(key.upper(), default)
+            try:
+                value = self._validate_value(key, value)
+            except (ValueError, TypeError):
+                self.warnings.append(f'{key.upper()} không hợp lệ; dùng {default}.')
+                value = default
+            setattr(self, key, value)
+        try:
+            validate_hotkeys(self.hotkey_start, self.hotkey_pause, self.confirm_button)
+        except ValueError as exc:
+            self.warnings.append(f'{exc} Đã khôi phục F8/F9.')
+            self.hotkey_start, self.hotkey_pause = 'f8', 'f9'
+        if not Path(self.env_path).exists():
+            self.save(**{key: getattr(self, key) for key in defaults})
 
-        w_env = os.getenv("WIDTH")
-        h_env = os.getenv("HEIGHT")
-
-        self.width: int = int(w_env) if w_env and w_env.isdigit() else detected_w
-        self.height: int = int(h_env) if h_env and h_env.isdigit() else detected_h
-        self.confirm_button: str = os.getenv("CONFIRM_BUTTON", "f").lower()
-        self.device: str = os.getenv("DEVICE", "mnk")
-        self.always_on_top: bool = os.getenv("ALWAYS_ON_TOP", "true").lower() in ("true", "1", "yes")
-        self.auto_window_mode: bool = os.getenv("AUTO_WINDOW_MODE", "true").lower() in ("true", "1", "yes")
-        self.resolution_preset: str = os.getenv("RESOLUTION_PRESET", "auto")
-
-        # Phím tắt toàn cục tùy chỉnh (mặc định là F8 và F9)
-        self.hotkey_start: str = os.getenv("HOTKEY_START", "f8").lower()
-        self.hotkey_pause: str = os.getenv("HOTKEY_PAUSE", "f9").lower()
-
-        # Chế độ tốc độ spam: "safe", "fast", "turbo", "extreme"
-        spam_mode_env = os.getenv("SPAM_MODE")
-        if spam_mode_env and spam_mode_env.lower() in ("safe", "fast", "turbo", "extreme"):
-            self.spam_mode: str = spam_mode_env.lower()
+    @staticmethod
+    def _validate_value(key: str, value: Any) -> Any:
+        if key in {'width', 'height', 'burst_count'}:
+            if isinstance(value, bool) or not re.fullmatch(r'\d+', str(value)):
+                raise ValueError(f'{key.upper()} phải là số nguyên dương.')
+            value = int(value)
+            limit = 5 if key == 'burst_count' else 16384
+            if not 1 <= value <= limit:
+                raise ValueError(f'{key.upper()} phải nằm trong khoảng 1–{limit}.')
+        elif key in {'always_on_top', 'auto_window_mode', 'click_combo'}:
+            text = str(value).strip().lower()
+            if text not in {'true', 'false', '1', '0', 'yes', 'no'}:
+                raise ValueError(f'{key.upper()} phải là true hoặc false.')
+            value = text in {'true', '1', 'yes'}
+        elif key in {'confirm_button', 'hotkey_start', 'hotkey_pause', 'spam_mode', 'trigger_mode'}:
+            value = str(value).strip().lower()
+            choices = {
+                'confirm_button': CONFIRM_KEYS,
+                'spam_mode': {'safe', 'fast', 'turbo', 'extreme'},
+                'trigger_mode': {'dialogue', 'always'},
+            }
+            if key in choices and value not in choices[key]:
+                raise ValueError(f'{key.upper()} không được hỗ trợ: {value}')
+        elif key == 'resolution_preset':
+            value = str(value)
         else:
-            self.spam_mode = "turbo"
-
-        # Tương thích ngược với human_simulation
-        self.human_simulation: bool = (self.spam_mode == "safe")
-
-        # Chế độ kích hoạt: "dialogue" (chỉ khi có hội thoại) | "always" (luôn spam khi ở trong game)
-        trigger_mode_env = os.getenv("TRIGGER_MODE", "dialogue").lower()
-        self.trigger_mode: str = trigger_mode_env if trigger_mode_env in ("dialogue", "always") else "dialogue"
-
-        # Số lần spam phím mỗi nhịp kích hoạt (burst count)
-        burst_env = os.getenv("BURST_COUNT", "2")
-        self.burst_count: int = int(burst_env) if burst_env.isdigit() and int(burst_env) > 0 else 2
-
-        # Kết hợp click chuột trái để tua và chọn đáp án siêu tốc
-        self.click_combo: bool = os.getenv("CLICK_COMBO", "false").lower() in ("true", "1", "yes")
-
-        # Khởi tạo hoặc cập nhật file .env nếu chưa có
-        if not os.path.exists(self.env_path):
-            self.save(
-                width=self.width,
-                height=self.height,
-                confirm_button=self.confirm_button,
-                device=self.device,
-                always_on_top=self.always_on_top,
-                hotkey_start=self.hotkey_start,
-                hotkey_pause=self.hotkey_pause,
-                spam_mode=self.spam_mode,
-                trigger_mode=self.trigger_mode,
-                burst_count=self.burst_count,
-                click_combo=self.click_combo,
-                human_simulation=self.human_simulation,
-                auto_window_mode=self.auto_window_mode,
-                resolution_preset=self.resolution_preset
-            )
+            raise ValueError(f'Thiết lập không được hỗ trợ: {key}')
+        return value
 
     def save(self, **kwargs: Any) -> None:
         """Lưu các thuộc tính vào file .env và cập nhật instance."""
-        dotenv_file = find_dotenv(self.env_path) or self.env_path
-
-        # Đảm bảo file tồn tại
-        if not os.path.exists(dotenv_file):
-            with open(dotenv_file, "w", encoding="utf-8") as f:
-                f.write("")
-
-        for key, val in kwargs.items():
-            setattr(self, key.lower(), val)
-            env_key = key.upper()
-            val_str = str(val).lower() if isinstance(val, bool) else str(val)
-            set_key(dotenv_file, env_key, val_str, quote_mode="never")
-
-        # Đồng bộ human_simulation nếu spam_mode thay đổi
-        if "spam_mode" in kwargs:
-            self.human_simulation = (self.spam_mode == "safe")
-            set_key(dotenv_file, "HUMAN_SIMULATION", str(self.human_simulation).lower(), quote_mode="never")
+        with self._lock:
+            changes = {key.lower(): self._validate_value(key.lower(), val) for key, val in kwargs.items()}
+            validate_hotkeys(
+                changes.get('hotkey_start', self.hotkey_start),
+                changes.get('hotkey_pause', self.hotkey_pause),
+                changes.get('confirm_button', self.confirm_button),
+            )
+            path = Path(self.env_path)
+            # Hoàn tất toàn bộ bản ghi trước khi thay file và cấu hình đang chạy.
+            with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as temp:
+                temp_path = Path(temp.name)
+            try:
+                temp_path.write_bytes(path.read_bytes() if path.exists() else b'')
+                for key, value in changes.items():
+                    text = str(value).lower() if isinstance(value, bool) else str(value)
+                    set_key(str(temp_path), key.upper(), text, quote_mode='always')
+                os.replace(temp_path, path)
+            finally:
+                temp_path.unlink(missing_ok=True)
+            self.__dict__.update(changes)
